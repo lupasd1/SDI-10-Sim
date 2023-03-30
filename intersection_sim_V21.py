@@ -1,3 +1,4 @@
+import math
 import random
 
 """
@@ -30,23 +31,28 @@ TURN_PROBABILITY = 0.25 #Probability that a new car will turn
 RIGHT_PROBABILITY = 0.5 #Probability that a car that is turning will turn right
 SELF_DRIVING_PROBABILITY = 0.5 #Probability a new car is self driving
 MEAN_ARRIVAL_TIME = 15
-PRINT_EVENTS = False
+PRINT_EVENTS = True
 HUMAN_STOP_TIME = 5 # All of the following values should be adjusted to the desired times
 SELF_DRIVEN_STOP_TIME = 4
-STRAIGHT_CLEAR_TIME = 10
-RIGHT_CLEAR_TIME = 11
-LEFT_CLEAR_TIME = 12
+STRAIGHT_CLEAR_TIME = 8
+RIGHT_CLEAR_TIME = 10
+LEFT_CLEAR_TIME = 14
+SPEED_LIMIT = 90
 
 
 class Driver:
 
-    def __init__(self, name, arrival_time, driver_type, source, destination):
+    def __init__(self, name, arrival_time, driver_type, source, destination, emissions = 0):
         self.name = name
         self.driver_type = driver_type
         self.arrival_time = arrival_time
         self.source = source
         self.destination = destination
         self.elapsed_time = 0
+        if driver_type == SELF_DRIVEN:
+            self.emissions = 206
+        else:
+            self.emissions = 116
     
     #Returns driver instance stop time
     def get_stop_time(self):
@@ -111,7 +117,7 @@ class Simulation:
 
         """
         Each road is represented as a list of waiting cars. You may
-        want to consider making a "road" a class.
+        want to consider making a "road" class.
         """
         self.north, self.east, self.south, self.west = [], [], [], []
         self.north_ready = False
@@ -123,6 +129,7 @@ class Simulation:
         self.generate_arrival()
         self.print_events = PRINT_EVENTS
         self.data = []
+        self.emissions = 0
 
     #Enable printing events as the simulation runs
     def enable_print_events(self):
@@ -142,10 +149,10 @@ class Simulation:
         self.clock = event.time
         if event.type == ARRIVAL:
             self.execute_arrival(event)
-        if event.type == DEPARTURE:
-            self.execute_departure(event)
-        if event.type == STOP:
-            self.execute_stop(event)
+        # if event.type == DEPARTURE:
+        #     self.execute_departure(event)
+        # if event.type == STOP:
+        #     self.execute_stop(event)
 
     #Driver leaving intersection event
     def execute_departure(self, event):
@@ -261,6 +268,10 @@ class Simulation:
     def execute_stop(self, event):
         if self.print_events:
             print(str(self.clock)+ ": A driver from the " + event.direction + " has stopped.")
+
+        # print(event.extra_info)
+        #if event.extra_info == "Straight":
+        #   self.depart_from(event.direction) 
         
         if event.direction == N:
             self.north_ready = True
@@ -293,33 +304,60 @@ class Simulation:
         if self.print_events:
             print(str(self.clock)+ ": A driver arrives from the " + event.direction + ".")
 
-        if event.direction == N:
-            if self.north == []: #Car needs to stop before clearing
-                self.north_ready = False
-            self.north.append(driver)
-            new_event = Event(STOP, self.clock + driver.get_stop_time(), N)
-            self.events.add_event(new_event)
-            
-        elif event.direction == E:
-            if self.east == []: #Car needs to stop before clearing
-                self.east_ready = False
-            self.east.append(driver)
-            new_event = Event(STOP, self.clock + driver.get_stop_time(), E)
-            self.events.add_event(new_event)
-            
-        elif event.direction == S:
-            if self.south == []: #Car needs to stop before clearing
-                self.south_ready = False
-            self.south.append(driver)
-            new_event = Event(STOP, self.clock + driver.get_stop_time(), S)
-            self.events.add_event(new_event)
-            
+        
+        crash_chance = random.random()
+        
+        if (crash_chance < 0.00001):
+
+            fatality_chance = random.random()
+            fatality_rate = 1 - math.exp(-SPEED_LIMIT / 50)
+            fatality = fatality_chance < fatality_rate
+
+            raise Exception("CRAAAASH!!!!! " + "Fatality :" + str(fatality))
+
+        # print(driver.get_clear_time())
+
+        if event.extra_info == "Straight":
+            print(str(self.clock + driver.get_clear_time())+ ": A driver from the " + event.direction + " has cleared the intersection going straight.")
+            self.emissions += (driver.emissions + (1/70) * ((SPEED_LIMIT - 70) ** 2))
         else:
-            if self.west == []: #Car needs to stop before clearing
-                self.west_ready = False
-            self.west.append(driver)
-            new_event = Event(STOP, self.clock + driver.get_stop_time(), W)
-            self.events.add_event(new_event)
+            if event.direction == N:
+                # if self.north == []: #Car needs to stop before clearing
+                #     self.north_ready = False
+                self.north.append(driver)
+
+                
+            elif event.direction == E:
+                # if self.east == []: #Car needs to stop before clearing
+                #     self.east_ready = False
+                self.east.append(driver)
+
+            elif event.direction == S:
+                # if self.south == []: #Car needs to stop before clearing
+                #     self.south_ready = False
+                self.south.append(driver)
+
+            else:
+                # if self.west == []: #Car needs to stop before clearing
+                #     self.west_ready = False
+                self.west.append(driver)
+
+        
+        directions = [self.north, self.east, self.south, self.west]
+
+        for direction in directions:
+            if direction != []:
+                # print(direction[0])
+                next_driver = direction.pop(0)
+                # print(next_driver)
+                print(str(self.clock + next_driver.get_clear_time())+ ": A driver from the " + event.direction + " has gone " + event.extra_info + " through the roundabout")
+                #represents a slower speed through the roundabout 
+                self.emissions += (driver.emissions + (1/70) * ((SPEED_LIMIT - 50) ** 2))
+
+
+
+        # new_event = Event(STOP, self.clock + driver.get_stop_time(), event.direction, event.extra_info)
+        # self.events.add_event(new_event)
             
         self.generate_arrival() #Generate the next arrival
 
@@ -384,9 +422,11 @@ def average(L):
     return sum(L)/len(L)
 
 def main():
+    print("\n\n")
     sim = Simulation(1000)
     sim.run()
-    sim.average_time()
+    # sim.average_time()
+    print("Emissions: " + str(sim.emissions))
     print("Done!")
 
 main()
